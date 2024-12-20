@@ -1,0 +1,173 @@
+// server.js
+const express = require('express');
+const WebSocket = require('ws');
+const nodemailer = require('nodemailer');
+const path = require('path');
+const dotenv = require('dotenv');
+
+// 환경변수 로드
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// 이메일 전송 설정
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+    }
+});
+
+// WebSocket 서버 설정
+const wss = new WebSocket.Server({ port: process.env.P2P_PORT || 6000 });
+const clients = new Set();
+
+// 미들웨어 설정
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+
+// 트랜잭션 처리 API
+app.post('/api/transaction', async (req, res) => {
+    try {
+        const transaction = req.body;
+        await handleTransaction(transaction);
+        broadcastTransaction(transaction);
+        res.json({ success: true, message: '거래가 성공적으로 처리되었습니다.' });
+    } catch (error) {
+        console.error('Transaction error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 이메일 전송 함수
+async function sendTransactionEmails(transaction) {
+    const { senderEmail, recipientEmail, amount, id } = transaction;
+
+    // 송신자 이메일
+    const senderMailOptions = {
+        from: process.env.EMAIL_USER,
+        to: senderEmail,
+        subject: '블록체인 거래 확인',
+        html: `
+            <h2>거래가 성공적으로 전송되었습니다</h2>
+            <p>거래 ID: ${id}</p>
+            <p>송금액: ${amount} BTC</p>
+            <p>시간: ${new Date().toLocaleString()}</p>
+            <p>상태: 처리 완료</p>
+        `
+    };
+
+    // 수신자 이메일
+    const recipientMailOptions = {
+        from: process.env.EMAIL_USER,
+        to: recipientEmail,
+        subject: '블록체인 거래 수신 알림',
+        html: `
+            <h2>새로운 거래가 수신되었습니다</h2>
+            <p>거래 ID: ${id}</p>
+            <p>수신액: ${amount} BTC</p>
+            <p>시간: ${new Date().toLocaleString()}</p>
+            <p>상태: 입금 완료</p>
+        `
+    };
+
+    // 이메일 전송
+    await Promise.all([
+        transporter.sendMail(senderMailOptions),
+        transporter.sendMail(recipientMailOptions)
+    ]);
+
+    console.log(`이메일 전송 완료 - 거래 ID: ${id}`);
+}
+
+// 트랜잭션 처리
+async function handleTransaction(transaction) {
+    try {
+        // 트랜잭션 검증
+        validateTransaction(transaction);
+
+        // 이메일 전송
+        await sendTransactionEmails(transaction);
+
+        console.log('트랜잭션 처리 완료:', transaction.id);
+        return true;
+    } catch (error) {
+        console.error('트랜잭션 처리 오류:', error);
+        throw error;
+    }
+}
+
+// 트랜잭션 검증
+function validateTransaction(transaction) {
+    const { sender, recipient, amount, senderEmail, recipientEmail } = transaction;
+
+    if (!sender || !recipient) {
+        throw new Error('송신자와 수신자 정보가 필요합니다.');
+    }
+
+    if (!senderEmail || !recipientEmail) {
+        throw new Error('이메일 주소가 필요합니다.');
+    }
+
+    if (!amount || amount <= 0) {
+        throw new Error('올바른 금액을 입력해주세요.');
+    }
+
+    return true;
+}
+
+// WebSocket 연결 처리
+wss.on('connection', (ws) => {
+    console.log('새로운 클라이언트 연결됨');
+    clients.add(ws);
+
+    // 연결 시 현재 상태 전송
+    ws.send(JSON.stringify({
+        type: 'CONNECTED',
+        timestamp: new Date().toISOString()
+    }));
+
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            if (data.type === 'TRANSACTION') {
+                broadcastTransaction(data.transaction);
+            }
+        } catch (error) {
+            console.error('WebSocket 메시지 처리 오류:', error);
+        }
+    });
+
+    ws.on('close', () => {
+        console.log('클라이언트 연결 해제');
+        clients.delete(ws);
+    });
+
+    ws.on('error', (error) => {
+        console.error('WebSocket 오류:', error);
+        clients.delete(ws);
+    });
+});
+
+// 트랜잭션 브로드캐스트
+function broadcastTransaction(transaction) {
+    const message = JSON.stringify({
+        type: 'TRANSACTION',
+        transaction,
+        timestamp: new Date().toISOString()
+    });
+
+    clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+}
+
+// 서버 시작
+app.listen(PORT, () => {
+    console.log(`HTTP 서버가 포트 ${PORT}에서 실행 중입니다`);
+    console.log(`WebSocket 서버가 포트 ${process.env.P2P_PORT || 6000}에서 실행 중입니다`);
+});

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P 블록체인 지갑</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.8/clipboard.min.js"></script>
+    <style>
+        .fixed-bottom {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+        .main-content {
+            margin-bottom: 50vh;
+        }
+        .transaction-animation {
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .network-active {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { background-color: rgba(34, 197, 94, 0.1); }
+            50% { background-color: rgba(34, 197, 94, 0.3); }
+            100% { background-color: rgba(34, 197, 94, 0.1); }
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 1rem;
+            background: #4CAF50;
+            color: white;
+            border-radius: 0.5rem;
+            display: none;
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="toast" class="toast">주소가 복사되었습니다!</div>
+
+    <div id="app" class="main-content">
+        <div class="max-w-6xl mx-auto p-4">
+            <!-- 상단 노드 상태 -->
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+                <h1 class="text-3xl font-bold text-gray-900 mb-6">P2P 블록체인 지갑</h1>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div id="node1" class="network-active p-4 rounded-lg border border-green-200">
+                        <h2 class="text-lg font-bold mb-2">노드 1</h2>
+                        <p class="text-sm text-gray-600">51.158.253.120:300</p>
+                        <div id="node1Status" class="mt-2 text-sm font-medium text-green-600">연결됨</div>
+                        <p class="text-sm text-gray-500 mt-2">잔액: <span id="balance1">1000.00000000</span> BTC</p>
+                        <p class="text-sm text-gray-500">주소: <span id="address1" class="break-all">WALLET-1</span></p>
+                    </div>
+                    <div id="node2" class="network-active p-4 rounded-lg border border-green-200">
+                        <h2 class="text-lg font-bold mb-2">노드 2</h2>
+                        <p class="text-sm text-gray-600">51.158.253.120:3001</p>
+                        <div id="node2Status" class="mt-2 text-sm font-medium text-green-600">연결됨</div>
+                        <p class="text-sm text-gray-500 mt-2">잔액: <span id="balance2">1000.00000000</span> BTC</p>
+                        <p class="text-sm text-gray-500">주소: <span id="address2" class="break-all">WALLET-2</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 거래 양식 -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-bold mb-6">거래 생성</h2>
+                <form id="transactionForm" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">보내는 지갑</label>
+                            <select id="senderSelect" name="sender" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <option value="node1">노드 1 (51.158.253.120:300)</option>
+                                <option value="node2">노드 2 (51.158.253.120:3001)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">받는 지갑</label>
+                            <select id="recipientSelect" name="recipient" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <option value="node2">노드 2 (51.158.253.120:3001)</option>
+                                <option value="node1">노드 1 (51.158.253.120:300)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 이메일 입력 필드 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">보내는 사람 이메일</label>
+                            <input type="email" name="senderEmail" required
+                                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                placeholder="your@email.com">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">받는 사람 이메일</label>
+                            <input type="email" name="recipientEmail" required
+                                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                placeholder="recipient@email.com">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">금액 (BTC)</label>
+                        <input type="number" name="amount" step="0.00001" min="0.00001" 
+                            class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="0.00000000">
+                    </div>
+
+                    <button type="submit" class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors">
+                        거래 전송
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 하단 고정 패널 -->
+    <div class="fixed-bottom">
+        <div class="max-w-6xl mx-auto p-4">
+            <!-- 네트워크 상태 -->
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-lg font-bold">노드 1 상태</h3>
+                        <span id="node1TotalBalance" class="text-sm font-medium text-green-600">1000.00000000 BTC</span>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <p>송금액: <span id="node1Sent">0.00000000</span> BTC</p>
+                        <p>수신액: <span id="node1Received">0.00000000</span> BTC</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-lg font-bold">노드 2 상태</h3>
+                        <span id="node2TotalBalance" class="text-sm font-medium text-green-600">1000.00000000 BTC</span>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <p>송금액: <span id="node2Sent">0.00000000</span> BTC</p>
+                        <p>수신액: <span id="node2Received">0.00000000</span> BTC</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 거래 내역 -->
+            <div class="bg-white rounded-lg p-4 shadow-sm">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">거래 내역</h2>
+                    <div class="text-sm font-medium text-gray-600">
+                        총 거래액: <span id="totalTransactionAmount">0.00000000</span> BTC
+                    </div>
+                </div>
+                <div id="transactionHistory" class="space-y-3 max-h-40 overflow-y-auto">
+                    <!-- 거래 내역이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 스크립트 로드 -->
+    <script src="/js/UI.js"></script>
+</body>
+</html>
